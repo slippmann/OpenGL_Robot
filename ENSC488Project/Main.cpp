@@ -5,10 +5,13 @@
 #include "Point2D.h"
 #include "Point3D.h"
 #include "Colour.h"
-#include <AntTweakBar.h>
 #include <ctime>
 #include <iostream>
 
+// Comment out to disable AntTweakBar
+#include <AntTweakBar.h>
+
+// Uncomment to enable debugging messages in terminal
 //#define DEBUG
 
 #define PI				3.14159265358979323846
@@ -37,11 +40,6 @@ enum keys {
 	RIGHT = 0x20
 };
 
-struct coefficients
-{
-	float a0, a1, a2, a3;
-};
-
 //==============GL Parameters============
 
 unsigned char currentKeys = (unsigned char)NONE;
@@ -57,9 +55,11 @@ Point3D newLocation;
 Point3D viaLocation;
 Point3D Location = Point3D(0, 0, 0);
 float dir = 0;
-struct coefficients xPosv, xPosf, yPosv, yPosf, zAnglev, zAnglef;
-float speed, trajTime = 1, elapsedTime = 0;
-bool isTrajSet = false;
+
+float speed;
+float trajTime = 1;
+float elapsedTime = 0;
+bool leftTurn = true;
 
 Point3D PrevEndPoint;
 Point3D EndPoint = Point3D(50, 0, -50);
@@ -254,16 +254,6 @@ void drawCylinder(Point3D start, Point3D end, float radius, Colour c)
 	glPopMatrix();
 }
 
-struct coefficients findCoefficients(float pos0, float posf, float speed0, float speedf, float time)
-{
-	float a0 = pos0;
-	float a1 = speed0; 
-	float a2 = (3.0 / (time*time))*(posf - pos0) - (2.0 / time)*speed0 - (1.0 / time)*speedf;
-	float a3 = -(2.0 / (time*time*time))*(posf - pos0) + (1.0 / (time*time))*(speedf + speed0);
-
-	return { a0, a1, a2, a3 };
-}
-
 void calculateIK(Point3D pt)
 {
 	float a, b; // temporary values
@@ -351,66 +341,6 @@ void calculateIK(Point3D pt)
 	t4 = theta4 * (180.0 / PI);
 	t5 = -theta5 * (180.0 / PI);
 	t6 = theta6 * (180.0 / PI);
-}
-
-void calculateTrajectory(Point3D newLocation, Point3D via, float speed, float time)
-{
-	//for x
-	xPosv = findCoefficients(Location.x, viaLocation.x, 0, speed, time/2);
-	xPosf = findCoefficients(viaLocation.x, newLocation.x, speed, 0, time / 2);
-
-	//for y
-	yPosv = findCoefficients(Location.y, viaLocation.y, 0, speed, time/2);
-	yPosf = findCoefficients(viaLocation.y, newLocation.y, speed, 0, time/2);
-
-	//for angle about z
-	zAnglev = findCoefficients(dir, viaLocation.z, 0, 0, time / 2);
-	zAnglef = findCoefficients(viaLocation.z, newLocation.z, 0, 0, time / 2);
-
-#ifdef DEBUG
-	std::cout << "xPosv: " << xPosv.a0 << ", " << xPosv.a1 << ", " << xPosv.a2 << ", " << xPosv.a3 << std::endl;
-	std::cout << "xPosf: " << xPosf.a0 << ", " << xPosf.a1 << ", " << xPosf.a2 << ", " << xPosf.a3 << std::endl;
-
-	std::cout << "yPosv: " << yPosv.a0 << ", " << yPosv.a1 << ", " << yPosv.a2 << ", " << yPosv.a3 << std::endl;
-	std::cout << "yPosf: " << yPosf.a0 << ", " << yPosf.a1 << ", " << yPosf.a2 << ", " << yPosf.a3 << std::endl;
-
-	std::cout << "zAnglev: " << zAnglev.a0 << ", " << zAnglev.a1 << ", " << zAnglev.a2 << ", " << zAnglev.a3 << std::endl;
-	std::cout << "zAnglef: " << zAnglef.a0 << ", " << zAnglef.a1 << ", " << zAnglef.a2 << ", " << zAnglef.a3 << std::endl;
-#endif
-
-	elapsedTime = 0;
-	isTrajSet = true;
-}
-
-void calculatePosition(float t)
-{
-	float t2;
-
-	if (t <= trajTime / 2)
-	{
-		Location.x = xPosv.a0 + xPosv.a1*t + xPosv.a2*t*t + xPosv.a3*t*t*t;
-		Location.y = yPosv.a0 + yPosv.a1*t + yPosv.a2*t*t + yPosv.a3*t*t*t;
-		dir = zAnglev.a0 + zAnglev.a1*t + zAnglev.a2*t*t + zAnglev.a3*t*t*t;
-	}
-	else
-	{
-		t2 = t - trajTime / 2;
-
-		Location.x = xPosf.a0 + xPosf.a1*t2 + xPosf.a2*t2*t2 + xPosf.a3*t2*t2*t2;
-		Location.y = yPosf.a0 + yPosf.a1*t2 + yPosf.a2*t2*t2 + yPosf.a3*t2*t2*t2;
-		dir = zAnglef.a0 + zAnglef.a1*t2 + zAnglef.a2*t2*t2 + zAnglef.a3*t2*t2*t2;
-	}
-
-#ifdef DEBUG
-	std::cout << "Time: " << t << std::endl;
-	std::cout << "Location: " << Location.x << ", " << Location.y << std::endl;
-#endif
-
-	if (t >= trajTime)
-	{
-		isTrajSet = false;
-		Location = newLocation;
-	}
 }
 
 void DrawPlatform()
@@ -592,14 +522,29 @@ void Draw()
 
 	glPushMatrix();
 	glTranslatef(Location.x, Location.y, 0);
-	glRotatef(dir, 0, 0, 1);
+
+	if (dir > 0)
+	{
+		glTranslatef(0, 10, 0);
+		glRotatef(dir, 0, 0, 1);
+		glTranslatef(0, -10, 0);
+	}
+	else
+	{
+		glTranslatef(0, -10, 0);
+		glRotatef(dir, 0, 0, 1);
+		glTranslatef(0, 10, 0);
+	}
+
 	DrawRobot();
 	glPopMatrix();
 
 	glFlush();
 
+#ifdef TW_INCLUDED
 	// Draw tweak bars
 	TwDraw();
+#endif
 
 	glutSwapBuffers();
 
@@ -662,7 +607,9 @@ void keyDownHandler(unsigned char key, int x, int y)
 		currentKeys |= (unsigned char)LEFT;
 	}
 
+#ifdef TW_INCLUDED
 	TwEventKeyboardGLUT(key, x, y);
+#endif
 }
 
 void keyUpHandler(unsigned char key, int x, int y)
@@ -690,9 +637,10 @@ void keyUpHandler(unsigned char key, int x, int y)
 	}
 }
 
+#ifdef TW_INCLUDED
 void TW_CALL button_callback(void * clientData)
 {
-	calculateTrajectory(newLocation, viaLocation, speed, trajTime);
+	calculateFullTrajectory(newLocation, viaLocation, speed, trajTime);
 }
 
 void initTweak()
@@ -790,10 +738,13 @@ void initTweak()
 	// Send the new window size to AntTweakBar
 	TwWindowSize(WINDOW_HEIGHT, WINDOW_WIDTH);
 }
+#endif
 
 void Terminate()
 {
+#ifdef TW_INCLUDED
 	TwTerminate();
+#endif
 }
 
 int main(int argc, char **argv)
@@ -810,7 +761,9 @@ int main(int argc, char **argv)
 	// Create window
 	glutCreateWindow("Project");
 
+#ifdef TW_INCLUDED
 	initTweak();
+#endif
 
 	atexit(Terminate);  // Called after glutMainLoop ends
 
