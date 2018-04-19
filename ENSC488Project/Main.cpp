@@ -5,6 +5,7 @@
 #include "Point2D.h"
 #include "Point3D.h"
 #include "Colour.h"
+#include "PlatformTrajectory.h"
 #include <ctime>
 #include <iostream>
 
@@ -58,8 +59,8 @@ float dir = 0;
 
 float speed;
 float trajTime = 1;
-float elapsedTime = 0;
-bool leftTurn = true;
+float loopTime = 0;
+clock_t loopBegin, loopEnd;
 
 Point3D PrevEndPoint;
 Point3D EndPoint = Point3D(50, 0, -50);
@@ -491,8 +492,7 @@ void Move()
 
 void Draw()
 {
-	clock_t loopBegin = clock();
-	clock_t loopEnd;
+	loopBegin = clock();
 
 	// Set Background Color
 	glClearColor(0.4, 0.4, 0.4, 1.0);
@@ -515,15 +515,16 @@ void Draw()
 
 	Move();
 
-	if (isTrajSet)
+	/*if (isTrajSet)
 	{
 		calculatePosition(elapsedTime);
-	}
+	}*/
 
 	glPushMatrix();
 	glTranslatef(Location.x, Location.y, 0);
+	glRotatef(dir, 0, 0, 1);
 
-	if (dir > 0)
+	/*if (dir > 0)
 	{
 		glTranslatef(0, 10, 0);
 		glRotatef(dir, 0, 0, 1);
@@ -534,7 +535,7 @@ void Draw()
 		glTranslatef(0, -10, 0);
 		glRotatef(dir, 0, 0, 1);
 		glTranslatef(0, 10, 0);
-	}
+	}*/
 
 	DrawRobot();
 	glPopMatrix();
@@ -553,10 +554,7 @@ void Draw()
 
 	loopEnd = clock();
 	
-	if (isTrajSet)
-	{
-		elapsedTime += double(loopEnd - loopBegin) / CLOCKS_PER_SEC;
-	}
+	loopTime = double(loopEnd - loopBegin) / CLOCKS_PER_SEC;
 }
 
 void directionHandler(int key, int x, int y)
@@ -640,7 +638,7 @@ void keyUpHandler(unsigned char key, int x, int y)
 #ifdef TW_INCLUDED
 void TW_CALL button_callback(void * clientData)
 {
-	calculateFullTrajectory(newLocation, viaLocation, speed, trajTime);
+	//calculateFullTrajectory(newLocation, viaLocation, speed, trajTime);
 }
 
 void initTweak()

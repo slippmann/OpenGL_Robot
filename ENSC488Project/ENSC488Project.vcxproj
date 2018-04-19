@@ -145,14 +145,14 @@
     <ClInclude Include="Colour.h" />
     <ClInclude Include="Point2D.h" />
     <ClInclude Include="Point3D.h" />
-    <ClInclude Include="Trajectory.h" />
+    <ClInclude Include="PlatformTrajectory.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Colour.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Point2D.cpp" />
     <ClCompile Include="Point3D.cpp" />
-    <ClCompile Include="Trajectory.cpp" />
+    <ClCompile Include="PlatformTrajectory.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
