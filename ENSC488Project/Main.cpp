@@ -1,21 +1,14 @@
 #define GL_GLEXT_PROTOTYPES
 
+#include "Global.h"
 #include <GL/glut.h>
-#include <math.h>
 #include "Point2D.h"
 #include "Point3D.h"
 #include "Colour.h"
 #include "PlatformTrajectory.h"
-#include <ctime>
-#include <iostream>
 
 // Comment out to disable AntTweakBar
 #include <AntTweakBar.h>
-
-// Uncomment to enable debugging messages in terminal
-//#define DEBUG
-
-#define PI				3.14159265358979323846
 
 #define WINDOW_HEIGHT	900
 #define WINDOW_WIDTH	WINDOW_HEIGHT
@@ -61,6 +54,8 @@ float speed;
 float trajTime = 1;
 float loopTime = 0;
 clock_t loopBegin, loopEnd;
+
+PlatformTrajectory platform;
 
 Point3D PrevEndPoint;
 Point3D EndPoint = Point3D(50, 0, -50);
@@ -429,7 +424,7 @@ void DrawRobot()
 
 void Move()
 {
-	const int stepSize = 1;
+	const int stepSize = 5;
 
 	if (currentKeys & UP)
 	{
@@ -492,6 +487,8 @@ void Move()
 
 void Draw()
 {
+	Point3D pathPoint;
+	bool isTurningLeft;
 	loopBegin = clock();
 
 	// Set Background Color
@@ -515,27 +512,27 @@ void Draw()
 
 	Move();
 
-	/*if (isTrajSet)
+	if (platform.HasPath)
 	{
-		calculatePosition(elapsedTime);
-	}*/
+		isTurningLeft = false;
+
+		pathPoint = platform.NextPosition(loopTime);
+
+		if (!isnan(pathPoint.x) && !isnan(pathPoint.y))
+		{
+			Location.x = pathPoint.x;
+			Location.y = pathPoint.y;
+		}
+		
+		if (!isnan(pathPoint.z))
+		{
+			dir = pathPoint.z;
+		}
+	}
 
 	glPushMatrix();
 	glTranslatef(Location.x, Location.y, 0);
 	glRotatef(dir, 0, 0, 1);
-
-	/*if (dir > 0)
-	{
-		glTranslatef(0, 10, 0);
-		glRotatef(dir, 0, 0, 1);
-		glTranslatef(0, -10, 0);
-	}
-	else
-	{
-		glTranslatef(0, -10, 0);
-		glRotatef(dir, 0, 0, 1);
-		glTranslatef(0, 10, 0);
-	}*/
 
 	DrawRobot();
 	glPopMatrix();
@@ -638,7 +635,7 @@ void keyUpHandler(unsigned char key, int x, int y)
 #ifdef TW_INCLUDED
 void TW_CALL button_callback(void * clientData)
 {
-	//calculateFullTrajectory(newLocation, viaLocation, speed, trajTime);
+	platform.CalculatePath(Point3D(Location.x, Location.y, dir), viaLocation, newLocation, speed, trajTime);
 }
 
 void initTweak()
