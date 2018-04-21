@@ -6,6 +6,8 @@
 #include "Point3D.h"
 #include "Colour.h"
 #include "PlatformTrajectory.h"
+#include "ArmTrajectory.h"
+#include "Inertia.h"
 
 // Comment out to disable AntTweakBar
 #include <AntTweakBar.h>
@@ -50,8 +52,8 @@ Point3D viaLocation;
 Point3D Location = Point3D(0, 0, 0);
 float dir = 0;
 
-float speed;
-float trajTime = 1;
+float speedPlatform, speedArm;
+float trajTimePlatform = 1, trajTimeArm = 1;
 float loopTime = 0;
 clock_t loopBegin, loopEnd;
 
@@ -72,6 +74,20 @@ float RotZ1, RotY, RotZ2;
 float r11 = 1, r12 = 0, r13 = 0, \
 r21 = 0, r22 = 1, r23 = 0, \
 r31 = 0, r32 = 0, r33 = 1;
+
+// Trajectory Generation
+ArmTrajectory armLocation;
+float timetotal = 0;
+bool trajGen = false;
+
+Point3D EndVia;
+Point3D EndGoal;
+
+// Static Balance
+float platformMass = 5000;//in grams
+float sensorMass = 0;
+Inertia staticBalance;
+bool isTipping;
 
 // ===========Function Declarations===========
 
@@ -530,6 +546,28 @@ void Draw()
 		}
 	}
 
+	if (trajGen == true)
+	{
+		if (timetotal > armLocation.trajTime)
+		{
+			timetotal = 0;
+			trajGen = false;
+		}
+
+		else
+		{
+			EndPoint = armLocation.GiveArmPos(timetotal);
+			timetotal += loopTime;
+		}
+	}
+
+	isTipping = staticBalance.IsTipping(platformMass, EndPoint, sensorMass);
+
+	if (isTipping == true)
+	{
+		//do nothing
+	}
+
 	glPushMatrix();
 	glTranslatef(Location.x, Location.y, 0);
 	glRotatef(dir, 0, 0, 1);
@@ -633,9 +671,23 @@ void keyUpHandler(unsigned char key, int x, int y)
 }
 
 #ifdef TW_INCLUDED
-void TW_CALL button_callback(void * clientData)
+void TW_CALL button_platform_callback(void * clientData)
 {
-	platform.CalculatePath(Point3D(Location.x, Location.y, dir), viaLocation, newLocation, speed, trajTime);
+	platform.CalculatePath(Point3D(Location.x, Location.y, dir), viaLocation, newLocation, speedPlatform, trajTimePlatform);
+}
+
+void TW_CALL button_arm_callback(void * clientData)
+{
+	trajGen = true;
+	bool isPossible = armLocation.CalculateArmPath(EndPoint, EndVia, EndGoal, speedArm, trajTimeArm);
+	
+	if (isPossible == false)
+	{
+		newLocation = Point3D(EndGoal.x - 50, EndGoal.y - 50, 0);
+		platform.CalculatePath(Point3D(Location.x, Location.y, dir), newLocation, newLocation, speedArm, trajTimeArm);
+		EndGoal = Point3D(50, 50, EndGoal.z);
+		armLocation.CalculateArmPath(EndPoint, EndVia, EndGoal, speedArm, trajTimeArm);
+	}
 }
 
 void initTweak()
@@ -659,7 +711,7 @@ void initTweak()
 	// Create a tweak bar
 	bar = TwNewBar("Settings");
 	TwDefine(" GLOBAL help='Manipulate the robot'"); // Message added to the help bar.
-	TwDefine(" Settings size='200 200' color='192 192 192' "); // change default tweak bar size and color
+	TwDefine(" Settings size='200 400' color='192 192 192' "); // change default tweak bar size and color
 
 	//===========Forward Kin==============
 	TwAddVarRW(bar, "Theta 1:", TW_TYPE_FLOAT, &t1,
@@ -696,32 +748,68 @@ void initTweak()
 
 	TwDefine(" Settings/'Inverse Kinematics' opened=false ");
 
-	//===========Trajectory==============
+	//===========Platform Trajectory==============
 	TwAddVarRW(bar, "End X Pos:", TW_TYPE_FLOAT, &newLocation.x,
-		" min=-400 max=400 step=10 group=Trajectory");
+		" min=-400 max=400 step=10 group='Platform Trajectory'");
 	TwAddVarRW(bar, "End Y Pos:", TW_TYPE_FLOAT, &newLocation.y,
-		" min=-400 max=400 step=10 group=Trajectory");
+		" min=-400 max=400 step=10 group='Platform Trajectory'");
 	TwAddVarRW(bar, "End Z Angle:", TW_TYPE_FLOAT, &newLocation.z,
-		" min=-180 max=180 step=5 group=Trajectory");
+		" min=-180 max=180 step=5 group='Platform Trajectory'");
 
-	TwAddSeparator(bar, "separator4", "group=Trajectory");
+	TwAddSeparator(bar, "separator4", "group='Platform Trajectory'");
 
 	TwAddVarRW(bar, "Via X Pos:", TW_TYPE_FLOAT, &viaLocation.x,
-		" min=-400 max=400 step=10 group=Trajectory");
+		" min=-400 max=400 step=10 group='Platform Trajectory'");
 	TwAddVarRW(bar, "Via Y Pos:", TW_TYPE_FLOAT, &viaLocation.y,
-		" min=-400 max=400 step=10 group=Trajectory");
+		" min=-400 max=400 step=10 group='Platform Trajectory'");
 	TwAddVarRW(bar, "Via Z Angle:", TW_TYPE_FLOAT, &viaLocation.z,
-		" min=-180 max=180 step=5 group=Trajectory");
+		" min=-180 max=180 step=5 group='Platform Trajectory'");
 
-	TwAddVarRW(bar, "Via Velocity:", TW_TYPE_FLOAT, &speed,
-		" min=0 max=200 step=10 group=Trajectory");
+	TwAddVarRW(bar, "Via Velocity: ", TW_TYPE_FLOAT, &speedPlatform,
+		" min=0 max=200 step=10 group='Platform Trajectory'");
 
-	TwAddVarRW(bar, "Time:", TW_TYPE_FLOAT, &trajTime,
-		" min=1 max=10 step=1 group=Trajectory");
+	TwAddVarRW(bar, "Time: ", TW_TYPE_FLOAT, &trajTimePlatform,
+		" min=1 max=10 step=1 group='Platform Trajectory'");
 
-	TwAddButton(bar, "Go", button_callback, NULL, "group=Trajectory");
+	TwAddButton(bar, "Go", button_platform_callback, NULL, "group='Platform Trajectory'");
 
-	TwDefine(" Settings/Trajectory opened=false ");
+	TwDefine(" Settings/'Platform Trajectory' opened=false ");
+
+	//===========Arm Trajectory==============
+	TwAddVarRW(bar, "End X Pos: ", TW_TYPE_FLOAT, &EndGoal.x,
+		" min=-400 max=400 step=10 group='Arm Trajectory'");
+	TwAddVarRW(bar, "End Y Pos: ", TW_TYPE_FLOAT, &EndGoal.y,
+		" min=-400 max=400 step=10 group='Arm Trajectory'");
+	TwAddVarRW(bar, "End Z Pos: ", TW_TYPE_FLOAT, &EndGoal.z,
+		" min=-180 max=180 step=10 group='Arm Trajectory'");
+
+	TwAddSeparator(bar, "separator7", "group='Arm Trajectory'");
+
+	TwAddVarRW(bar, "Via X Pos: ", TW_TYPE_FLOAT, &EndVia.x,
+		" min=-400 max=400 step=10 group='Arm Trajectory'");
+	TwAddVarRW(bar, "Via Y Pos: ", TW_TYPE_FLOAT, &EndVia.y,
+		" min=-400 max=400 step=10 group='Arm Trajectory'");
+	TwAddVarRW(bar, "Via Z Pos: ", TW_TYPE_FLOAT, &EndVia.z,
+		" min=-180 max=180 step=10 group='Arm Trajectory'");
+
+	TwAddVarRW(bar, "Via Velocity:", TW_TYPE_FLOAT, &speedArm,
+		" min=0 max=200 step=10 group='Arm Trajectory'");
+
+	TwAddVarRW(bar, "Time:", TW_TYPE_FLOAT, &trajTimeArm,
+		" min=1 max=10 step=1 group='Arm Trajectory'");
+
+	TwAddButton(bar, "Go ", button_arm_callback, NULL, "group='Arm Trajectory'");
+
+	TwDefine(" Settings/'Arm Trajectory' opened=false ");
+
+
+	//===========Static Balance==============
+	TwAddVarRW(bar, "Sensor Mass (g):", TW_TYPE_FLOAT, &sensorMass,
+		" min=0 max=1000 step=50 group='Static Balance'");
+	TwAddVarRO(bar, "Is Tipping:", TW_TYPE_BOOLCPP, &isTipping,
+		"group='Static Balance'");
+
+	TwDefine(" Settings/'Static Balance' opened=false ");
 
 	//===========Other==============
 	TwAddSeparator(bar, "separator2", NULL);
